@@ -83,10 +83,10 @@ resources:
       type: SMALL
       loggingLevel: INFO
       routes: 
-        - protocol: HTTP 
-          port: '80'
-          instancePort: '80'
-          instanceProtocol: HTTP
+        - protocol: HTTPS 
+          port: '443'
+          instancePort: '443'
+          instanceProtocol: HTTPS
           algorithm: WEIGHTED_ROUND_ROBIN
       network: '${resource.NSX.id}'
       instances: '${resource.Web[*].id}'
