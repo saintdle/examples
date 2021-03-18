@@ -1,5 +1,5 @@
 formatVersion: 1
-name: On-Demand-Net-Tags-SG
+name: On-Demand-Net-Tags-SG-Do-NOT-Modify
 version: 1
 inputs:
   Web_VM_Name:
@@ -31,6 +31,12 @@ inputs:
     encrypted: true
     default: VMware1!
     minLength: 4
+  web_vm_count:
+    type: integer
+    title: No. of Web VMs
+    default: 2
+    minimum: 1
+    maximum: 3
 resources:
   web-sg:
     type: Cloud.SecurityGroup
@@ -55,8 +61,9 @@ resources:
   Web:
     type: Cloud.vSphere.Machine
     properties:
+      count: '${input.web_vm_count}'
       name: '${input.Web_VM_Name}'
-      image: 
+      image: Ubuntu-18
       flavor: medium
       tags:
         - key: web
@@ -70,6 +77,19 @@ resources:
             - '${resource["web-sg"].id}'
       constraints:
         - tag: 'env:vsphere'
+  Cloud_NSX_LoadBalancer_1:
+    type: Cloud.NSX.LoadBalancer
+    properties:
+      type: SMALL
+      loggingLevel: INFO
+      routes: 
+        - protocol: HTTP 
+          port: '80'
+          instancePort: '80'
+          instanceProtocol: HTTP
+          algorithm: WEIGHTED_ROUND_ROBIN
+      network: '${resource.NSX.id}'
+      instances: '${resource.Web[*].id}'
   NSX:
     type: Cloud.NSX.Network
     properties:
@@ -87,7 +107,7 @@ resources:
         username: '${input.username}'
         password: '${input.password}'
       name: '${input.DB_VM_Name}'
-      image: 
+      image: Ubuntu-18
       flavor: medium
       tags:
         - key: db
