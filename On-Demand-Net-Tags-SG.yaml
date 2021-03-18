@@ -56,7 +56,7 @@ resources:
     type: Cloud.vSphere.Machine
     properties:
       name: '${input.Web_VM_Name}'
-      image: Ubuntu-18
+      image: 
       flavor: medium
       tags:
         - key: web
@@ -87,7 +87,7 @@ resources:
         username: '${input.username}'
         password: '${input.password}'
       name: '${input.DB_VM_Name}'
-      image: Ubuntu-18
+      image: 
       flavor: medium
       tags:
         - key: db
