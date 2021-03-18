@@ -96,7 +96,7 @@ resources:
       name: '${input.Network_Name}'
       networkType: outbound
       constraints:
-        - tag: 'net:ondemand'
+        - tag: 'net:on-demand'
       tags:
         - key: web
           value: apache-mysql
