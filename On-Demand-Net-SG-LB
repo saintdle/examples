@@ -1,0 +1,113 @@
+formatVersion: 1
+name: On-Demand-Net-Tags-SG
+version: 1
+inputs:
+  Web_VM_Name:
+    type: string
+    title: Web VM Name
+    default: Web
+  DB_VM_Name:
+    type: string
+    title: DB VM Name
+    default: DB
+  Network_Name:
+    type: string
+    title: Network Name
+    default: sg_network
+  platform:
+    type: string
+    enum:
+      - vsphere
+      - azure
+    title: Platform
+    default: vsphere
+  username:
+    type: string
+    title: DB User
+    default: dbuser
+  password:
+    type: string
+    title: DB Password
+    encrypted: true
+    default: VMware1!
+    minLength: 4
+resources:
+  web-sg:
+    type: Cloud.SecurityGroup
+    properties:
+      securityGroupType: new
+      rules:
+        - name: https-wr
+          direction: inbound
+          protocol: TCP
+          ports: 443
+          source: any
+          access: Allow
+        - name: ssh-wr
+          direction: inbound
+          protocol: TCP
+          ports: 22
+          source: any
+          access: Deny
+      tags:
+        - key: web
+          value: https
+  Web:
+    type: Cloud.vSphere.Machine
+    properties:
+      name: '${input.Web_VM_Name}'
+      image: 
+      flavor: medium
+      tags:
+        - key: web
+          value: apache
+      networks:
+        - network: '${resource.NSX.id}'
+          tags:
+            - key: web
+              value: apache
+          securityGroups:
+            - '${resource["web-sg"].id}'
+      constraints:
+        - tag: 'env:vsphere'
+  NSX:
+    type: Cloud.NSX.Network
+    properties:
+      name: '${input.Network_Name}'
+      networkType: outbound
+      constraints:
+        - tag: 'net:ondemand'
+      tags:
+        - key: web
+          value: apache-mysql
+  DB:
+    type: Cloud.vSphere.Machine
+    properties:
+      remoteAccess:
+        username: '${input.username}'
+        password: '${input.password}'
+      name: '${input.DB_VM_Name}'
+      image: 
+      flavor: medium
+      tags:
+        - key: db
+          value: mysql
+      networks:
+        - network: '${resource.NSX.id}'
+          tags:
+            - key: db
+              value: mysql
+          securityGroups:
+            - '${resource["db-sg"].id}'
+      constraints:
+        - tag: 'env:${input.platform}'
+  db-sg:
+    type: Cloud.SecurityGroup
+    properties:
+      securityGroupType: new
+      rules:
+        - name: mysql-wr
+          direction: inbound
+          protocol: TCP
+          ports: 3306
+          source: any
