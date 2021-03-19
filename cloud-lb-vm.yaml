@@ -1,0 +1,28 @@
+formatVersion: 1
+inputs: {}
+resources:
+  Cloud_LoadBalancer_1:
+    type: Cloud.LoadBalancer
+    properties:
+      routes: 
+        - port: 443
+          protocol: HTTPS
+      network: '${resource.Cloud_Network_1.id}'
+      instances:
+        - '${resource.Cloud_Machine_1.id}'
+      internetFacing: false
+  Cloud_Machine_1:
+    type: Cloud.Machine
+    properties:
+      image: 
+      flavor: 'small'
+      networks:
+        - network: '${resource.Cloud_Network_1.id}'
+      constraints: 
+        - tag: env:vsphere
+  Cloud_Network_1:
+    type: Cloud.Network
+    properties:
+      networkType: outbound
+      constraints: 
+        - tag: net:on-demand
