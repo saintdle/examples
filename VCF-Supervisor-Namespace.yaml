@@ -9,3 +9,5 @@ resources:
     type: Cloud.SV.Namespace
     properties:
       name: ${input.ns-name}
+    contraints:
+      - tags: 'vwt:supc1'
