@@ -1,0 +1,190 @@
+---
+project: Field Demo
+kind: PIPELINE
+name: Deploy vSphere K8s Cluster in Namespace
+icon: organization,left, is-info is-solid
+enabled: false
+description: Deploys a Tanzu cluster in a supervisor namespace
+concurrency: 10
+input:
+  add_to_cs: 'YES'
+  k8s_cluster_name: ''
+  super_ns: ''
+  super_ns_cluster: wld01-clu01
+  supervisor_address: ''
+_inputMeta:
+  k8s_cluster_name:
+    mandatory: true
+    description: Enter Name for Tanzu K8s Cluster
+  add_to_cs:
+    mandatory: false
+    description: Add as Code Stream Endpoint (YES or NO)
+  super_ns:
+    mandatory: true
+    description: Enter Supervisor Namespace Name
+  supervisor_address:
+    mandatory: true
+    description: ''
+  super_ns_cluster:
+    mandatory: false
+    description: vSphere Cluster with Supervisor enabled
+workspace:
+  endpoint: Docker Host in VMC
+  image: vmwarecmbu/k8s-ci-container:latest
+  registry: ''
+  path: ''
+  autoCloneForTrigger: false
+  limits:
+    memory: 512
+    cpu: 1.0
+stageOrder:
+- Get vRA API
+- Create Tanzu K8s Cluster
+stages:
+  Create Tanzu K8s Cluster:
+    taskOrder:
+    - Create Login Script to Supervisor Cluster
+    - Create Tanzu Cluster
+    - Checking for Cluster Completion
+    tasks:
+      Create Login Script to Supervisor Cluster:
+        type: CI
+        input:
+          steps:
+          - '# Download the vSphere Kubectl Plugin'
+          - wget --no-check-certificate https://${input.supervisor_address}/wcp/plugin/linux-amd64/vsphere-plugin.zip
+          - '# Extract the plugin'
+          - unzip vsphere-plugin.zip
+          - '# Install the plugin'
+          - mv -f bin/* /usr/bin/
+          - ''
+          - tee expect.sh > /dev/null << EOF
+          - '#!/usr/bin/expect -f'
+          - set timeout -1
+          - spawn kubectl vsphere login --server ${input.supervisor_address} --insecure-skip-tls-verify
+            --vsphere-username ${var.vcf-username}
+          - match_max 100000
+          - expect -exact "\r
+          - 'Password: "'
+          - send -- "${var.vcf-password}\r"
+          - expect eof
+          - EOF
+          - ''
+          - chmod 777 expect.sh
+          - ''
+          - ''
+          export: [
+            ]
+          artifacts: [
+            ]
+          process: [
+            ]
+      Create Tanzu Cluster:
+        type: CI
+        input:
+          steps:
+          - ./expect.sh
+          - ''
+          - tee cluster.yaml > /dev/null << EOF
+          - 'apiVersion: run.tanzu.vmware.com/v1alpha1'
+          - 'kind: TanzuKubernetesCluster'
+          - 'metadata:'
+          - '  name: ${input.k8s_cluster_name}'
+          - '  namespace: ${input.super_ns}'
+          - 'spec:'
+          - '  distribution:'
+          - '    version: v1.17.8'
+          - '  topology:'
+          - '    controlPlane:'
+          - '      class: best-effort-small'
+          - '      count: 1'
+          - '      storageClass: management-storage-policy-thin'
+          - '    workers:'
+          - '      class: best-effort-small'
+          - '      count: 3'
+          - '      storageClass: management-storage-policy-thin'
+          - '  settings:'
+          - '    network:'
+          - '      cni:'
+          - '        name: calico'
+          - '    storage:'
+          - '      defaultClass: management-storage-policy-thin'
+          - EOF
+          - ''
+          - kubectl config use-context ${input.super_ns}
+          - kubectl apply -f cluster.yaml
+          - ''
+          - ''
+          - ''
+          export: [
+            ]
+          artifacts: [
+            ]
+          process: [
+            ]
+      Checking for Cluster Completion:
+        type: CI
+        input:
+          steps:
+          - ./expect.sh
+          - ''
+          - kubectl config use-context ${input.super_ns}
+          - ''
+          - currentstatus=$(kubectl get tkc -o=jsonpath='{.items[0].status.phase}')
+          - statusdone="running"
+          - while [ $currentstatus != $statusdone ]
+          - do
+          - '  echo "Still Building Cluster"'
+          - '  sleep 20'
+          - '  currentstatus=$(kubectl get tkc -o=jsonpath=''{.items[*].status.phase}'')'
+          - done
+          - ''
+          - echo "Cluster Build Complete"
+          export: [
+            ]
+          artifacts: [
+            ]
+          process: [
+            ]
+  Get vRA API:
+    taskOrder:
+    - Authentication
+    tasks:
+      Authentication:
+        type: REST
+        input:
+          action: post
+          url: https://${var.vraFQDN}/csp/gateway/am/idp/auth/login?access_token
+          headers:
+            Accept: application/json
+            Content-Type: application/json
+          payload: |-
+            {
+              "username": "${var.vraUser}",
+              "password": "${var.vraUserPassword}"
+            }
+notifications:
+  email:
+  - endpoint: Codestream-Default-Email
+    body: |-
+      <html>
+
+      <body>
+
+      <p class=MsoNormal><b><span style='font-size:14.0pt'>Cluster Information:<o:p></o:p></span></b></p>
+
+      <p class=MsoNormal><span style='font-size:14.0pt'>Cluster Service Account: dev-admin<o:p></o:p></span></p>
+
+      <p class=MsoNormal><span style='font-size:14.0pt'>Cluster Address: ${Integration-to-vRA.Collect-Cluster-Information.output.exports.APISERVER}<o:p></o:p></span></p>
+
+      <p class=MsoNormal><span style='font-size:14.0pt'>Cluster Token: ${Integration-to-vRA.Collect-Cluster-Information.output.exports.TOKEN}<o:p></o:p></span></p>
+
+      <p class=MsoNormal><span style='font-size:14.0pt'>Cluster Fingerprint: ${Integration-to-vRA.Collect-Cluster-Information.output.exports.FINGERPRINT}<o:p></o:p></span></p>
+
+      </body>
+
+      </html>
+    event: SUCCESS
+    subject: TKG Cluster Deployment Complete
+    to:
+    - ${requestBy}
