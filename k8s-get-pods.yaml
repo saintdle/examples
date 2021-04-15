@@ -1,0 +1,40 @@
+---
+project: Field Demo
+kind: PIPELINE
+name: k8s-get-pods
+icon: organization,left, is-ultramarine
+enabled: true
+concurrency: 10
+workspace:
+  endpoint: Docker Host in VMC
+  image: saintdle/k8s-ci:latest
+  registry: ''
+  path: ''
+  autoCloneForTrigger: false
+  limits:
+    memory: 512
+    cpu: 1.0
+stageOrder:
+- Stage0
+stages:
+  Stage0:
+    taskOrder:
+    - k8s-get
+    tasks:
+      k8s-get:
+        type: K8S
+        endpoints:
+          kubernetesServer: deanl-cluster
+        input:
+          action: GET
+          timeout: 5
+          filterByLabel: ''
+          filePath: ''
+          scmConstants: {
+            }
+          yaml: |-
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              namespace: kube-system
+              name: coredns
