@@ -1,0 +1,94 @@
+name: MicroK8 for Terraform Runtime Interface
+version: 1
+formatVersion: 1
+inputs:
+  user:
+    type: string
+    title: Username for SSH
+    description: The username you would like to usee for admin.
+    default: demouser
+  password:
+    type: string
+    pattern: '[a-z0-9A-Z@#$]+'
+    encrypted: true
+    default: VMware1!
+    title: Admin Account Password
+    description: The password you would like to use for the ocuser account.
+  namespace:
+    type: string
+    title: Terraform Namespace
+    description: The Default Namespace for Terraform Execution.
+    default: vravmware
+  environment:
+    type: string
+    default: 'env:vsphere'
+    title: Target Environment
+    description: Default Tag Constraint for Compute and Network Resources
+resources:
+  k8server:
+    type: Cloud.Machine
+    metadata:
+      layoutPosition:
+        - 0
+        - 0
+    properties:
+      image: Ubuntu-18
+      flavor: Medium
+      cloudConfig: |
+
+        hostname: microk8
+
+        users:
+          - name: ${input.user}
+            sudo: ['ALL=(ALL) NOPASSWD:ALL']
+            groups: sudo
+            shell: /bin/bash
+
+        runcmd:
+          - USER=${input.user}
+          - PASS=${input.password}
+          - echo $USER:$PASS | /usr/sbin/chpasswd
+          - echo $USER:$PASS | /usr/sbin/chpasswd
+          - sed -i "s/PasswordAuthentication no/PasswordAuthentication yes/g" /etc/ssh/sshd_config
+          - service ssh reload
+          - export cloudip=$(curl http://checkip.amazonaws.com/)
+          - export onpremip=$(ip route get 8.8.8.8 | awk -F"src " 'NR==1{split($2,a," ");print a[1]}')
+          - sudo snap install microk8s --classic --channel=1.16/stable
+          - sudo microk8s.status --wait-ready
+          - sudo apt install debconf-utils -y
+          - sudo iptables -P FORWARD ACCEPT
+          - echo iptables-persistent iptables-persistent/autosave_v4 boolean true | sudo debconf-set-selections
+          - echo iptables-persistent iptables-persistent/autosave_v6 boolean true | sudo debconf-set-selections
+          - sudo apt-get -y install iptables-persistent
+          - sudo ufw default allow routed
+          - sudo snap alias microk8s.kubectl kubectl
+          - sudo microk8s kubectl create namespace ${input.namespace}
+          - sudo usermod -a -G microk8s ${input.user}
+          - sudo chown -f -R ${input.user} ~/.kube
+          - sudo sed -i 's/127.0.0.1/'$onpremip'/g' /var/snap/microk8s/current/credentials/kubelet.config
+          - sudo cp /var/snap/microk8s/current/credentials/kubelet.config /home/${input.user}/vmware.config
+          - sudo chown demouser:demouser /home/${input.user}/vmware.config
+          - sudo echo "$onpremip microk8" >> /etc/hosts
+          - sudo systemctl disable systemd-resolved          
+          - sudo systemctl stop systemd-resolved
+          - sudo echo 'DNSStubListener=no' >> /etc/systemd/resolved.conf
+          - sudo sed -i 's/127.0.0.1/'$onpremip'/g' /var/snap/microk8s/current/credentials/kubelet.config
+          - sudo ln -sf /run/systemd/resolve/resolv.conf /etc/resolv.conf
+          
+      constraints:
+        - tag: '${to_lower(input.environment)}'
+      networks:
+        - name: '${resource.Cloud_Network_1.name}'
+          network: '${resource.Cloud_Network_1.id}'
+          assignPublicIpAddress: 1
+  Cloud_Network_1:
+    type: Cloud.Network
+    metadata:
+      layoutPosition:
+        - 1
+        - 0
+    properties:
+      name: Field-Demo
+      networkType: existing
+      constraints:
+        - tag: '${to_lower(input.environment)}'
