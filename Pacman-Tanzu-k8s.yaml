@@ -1,0 +1,347 @@
+---
+project: deanl-cloud-init
+kind: PIPELINE
+name: Pacman-Tanzu-k8s
+icon: organization,left, is-warm-grey
+enabled: true
+concurrency: 10
+input:
+  namespace: pacman-codestream
+_inputMeta:
+  namespace:
+    description: ''
+    mandatory: true
+workspace:
+  type: DOCKER
+  endpoint: ''
+  image: ''
+  registry: ''
+  path: ''
+  autoCloneForTrigger: false
+  limits:
+    cpu: 1.0
+    memory: 512
+stageOrder:
+- Deploy Pac-Man
+stages:
+  Deploy Pac-Man:
+    taskOrder:
+    - Create Namespace
+    - Create PSP,Create ClusterRole,Create Secret
+    - Create PVC,Create RoleBinding
+    - Create ClusterRoleBinding
+    - Create MongoDB
+    - Create Pac-Man Front End
+    - Create MongoDB Services,Create Pac-Man UI Services
+    tasks:
+      Create Secret:
+        type: K8S
+        endpoints:
+          kubernetesServer: tkg02
+        input:
+          action: CREATE
+          timeout: 5
+          continueOnConflict: false
+          filePath: ''
+          scmConstants: {
+            }
+          yaml: "apiVersion: v1\nkind: Secret\nmetadata:\n  name: mongodb-users-secret\n  namespace: ${input.namespace}\n\
+            type: Opaque \ndata:\n  database-admin-password: Y2x5ZGU=\n  database-name: cGFjbWFu\n  database-password:\
+            \ cGlua3k=\n  database-user: Ymxpbmt5\n  keyfile-value: cjNkaDR0Cg=="
+      Create Namespace:
+        type: K8S
+        endpoints:
+          kubernetesServer: tkg02
+        input:
+          action: CREATE
+          timeout: 5
+          continueOnConflict: false
+          filePath: ''
+          scmConstants: {
+            }
+          yaml: |-
+            apiVersion: v1
+            kind: Namespace
+            metadata:
+              name: ${input.namespace}
+      Create ClusterRoleBinding:
+        type: K8S
+        ignoreFailure: true
+        endpoints:
+          kubernetesServer: tkg02
+        input:
+          action: CREATE
+          timeout: 5
+          continueOnConflict: false
+          filePath: ''
+          scmConstants: {
+            }
+          yaml: |-
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: ClusterRoleBinding
+            metadata:
+              name: pacman-clusterrole
+              namespace: ${input.namespace}
+            roleRef:
+              apiGroup: rbac.authorization.k8s.io
+              kind: ClusterRole
+              name: pacman-clusterrole
+            subjects:
+            - apiGroup: rbac.authorization.k8s.io
+              kind: Group
+              name: system:serviceaccounts
+            - kind: ServiceAccount
+              name: default
+              namespace: ${input.namespace}
+      Create RoleBinding:
+        type: K8S
+        ignoreFailure: true
+        endpoints:
+          kubernetesServer: tkg02
+        input:
+          action: CREATE
+          timeout: 5
+          continueOnConflict: false
+          filePath: ''
+          scmConstants: {
+            }
+          yaml: |-
+            apiVersion: rbac.authorization.k8s.io/v1
+            kind: RoleBinding
+            metadata:
+              name: pacman-clusterrole
+              namespace: ${input.namespace}
+            roleRef:
+              apiGroup: rbac.authorization.k8s.io
+              kind: ClusterRole
+              name: pacman-clusterrole
+            subjects:
+            - apiGroup: rbac.authorization.k8s.io
+              kind: Group
+              name: system:serviceaccounts
+            - kind: ServiceAccount
+              name: default
+              namespace: ${input.namespace}
+      Create MongoDB:
+        type: K8S
+        endpoints:
+          kubernetesServer: tkg02
+        input:
+          action: CREATE
+          timeout: 5
+          continueOnConflict: false
+          filePath: ''
+          scmConstants: {
+            }
+          yaml: |-
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              labels:
+                name: mongo
+              name: mongo
+              namespace: ${input.namespace}
+            spec:
+              replicas: 1
+              selector:
+                matchLabels:
+                  name: mongo
+              template:
+                metadata:
+                  labels:
+                    name: mongo
+                spec:
+                  containers:
+                  - image: centos/mongodb-36-centos7
+                    name: mongo
+                    env:
+                    - name: MONGODB_ADMIN_PASSWORD
+                      value: clyde
+                    - name: MONGODB_DATABASE
+                      value: pacman
+                    - name: MONGODB_PASSWORD
+                      valueFrom:
+                        secretKeyRef:
+                          key: database-password
+                          name: mongodb-users-secret
+                    - name: MONGODB_USER
+                      valueFrom:
+                        secretKeyRef:
+                          key: database-user
+                          name: mongodb-users-secret
+                    readinessProbe:
+                      exec:
+                       command:
+                        - /bin/sh
+                        - -i
+                        - -c
+                        - mongo 127.0.0.1:27017/$MONGODB_DATABASE -u $MONGODB_USER -p $MONGODB_PASSWORD
+                          --eval="quit()"
+                    ports:
+                    - name: mongo
+                      containerPort: 27017
+                    volumeMounts:
+                      - name: mongo-db
+                        mountPath: /data/db
+                  volumes:
+                    - name: mongo-db
+                      persistentVolumeClaim:
+                        claimName: mongo-storage
+      Create ClusterRole:
+        type: K8S
+        ignoreFailure: true
+        endpoints:
+          kubernetesServer: tkg02
+        input:
+          action: CREATE
+          timeout: 5
+          continueOnConflict: false
+          filePath: ''
+          scmConstants: {
+            }
+          yaml: |-
+            kind: ClusterRole
+            apiVersion: rbac.authorization.k8s.io/v1
+            metadata:
+              name: pacman-clusterrole
+            rules:
+            - apiGroups:
+              - policy
+              resources:
+              - podsecuritypolicies
+              verbs:
+              - use
+              resourceNames:
+              - pacman
+            - apiGroups: [""]
+              resources: ["pods", "nodes"]
+              verbs: ["get", "watch", "list"]
+      Create Pac-Man Front End:
+        type: K8S
+        endpoints:
+          kubernetesServer: tkg02
+        input:
+          action: CREATE
+          timeout: 5
+          continueOnConflict: false
+          filePath: ''
+          scmConstants: {
+            }
+          yaml: "apiVersion: apps/v1\nkind: Deployment\nmetadata:\n  labels:\n    name: pacman\n  name:\
+            \ pacman\n  namespace: ${input.namespace}\nspec:\n  replicas: 1\n  selector:\n    matchLabels:\n\
+            \      name: pacman\n  template:\n    metadata:\n      labels:\n        name: pacman\n   \
+            \ spec:\n      containers:\n      - image: quay.io/ifont/pacman-nodejs-app:latest\n      \
+            \  name: pacman\n        ports:\n        - containerPort: 8080\n          name: http-server\n\
+            \          protocol: TCP\n        env:\n        - name: MONGO_SERVICE_HOST\n          value:\
+            \ mongo\n        - name: MONGO_AUTH_USER\n          valueFrom:\n            secretKeyRef:\n\
+            \              key: database-user\n              name: mongodb-users-secret\n        - name:\
+            \ MONGO_AUTH_PWD\n          valueFrom:\n            secretKeyRef:\n              key: database-password\n\
+            \              name: mongodb-users-secret\n        - name: MONGO_DATABASE\n          value:\
+            \ pacman\n        - name: MY_MONGO_PORT\n          value: \"27017\"\n        - name: MONGO_USE_SSL\n\
+            \          value: \"false\"\n        - name: MONGO_VALIDATE_SSL\n          value: \"false\"\
+            \n        - name: MY_NODE_NAME\n          valueFrom:\n            fieldRef:\n            \
+            \  apiVersion: v1\n              fieldPath: spec.nodeName      "
+      Create MongoDB Services:
+        type: K8S
+        endpoints:
+          kubernetesServer: tkg02
+        input:
+          action: CREATE
+          timeout: 5
+          continueOnConflict: false
+          filePath: ''
+          scmConstants: {
+            }
+          yaml: |-
+            apiVersion: v1
+            kind: Service
+            metadata:
+              labels:
+                name: mongo
+              name: mongo
+            spec:
+              type: ClusterIP
+              ports:
+                - port: 27017
+                  targetPort: 27017
+              selector:
+                name: mongo
+      Create Pac-Man UI Services:
+        type: K8S
+        endpoints:
+          kubernetesServer: tkg02
+        input:
+          action: CREATE
+          timeout: 5
+          continueOnConflict: false
+          filePath: ''
+          scmConstants: {
+            }
+          yaml: |-
+            apiVersion: v1
+            kind: Service
+            metadata:
+              name: pacman
+              namespace: ${input.namespace}
+              labels:
+                name: pacman
+            spec:
+              type: LoadBalancer
+              ports:
+                - port: 80
+                  targetPort: 8080
+                  protocol: TCP
+              selector:
+                name: pacman
+      Create PSP:
+        type: K8S
+        ignoreFailure: true
+        endpoints:
+          kubernetesServer: tkg02
+        input:
+          action: CREATE
+          timeout: 5
+          continueOnConflict: false
+          filePath: ''
+          scmConstants: {
+            }
+          yaml: |-
+            apiVersion: policy/v1beta1
+            kind: PodSecurityPolicy
+            metadata:
+              name: pacman
+            spec:
+              privileged: true
+              seLinux:
+                rule: RunAsAny
+              supplementalGroups:
+                rule: RunAsAny
+              runAsUser:
+                rule: RunAsAny
+              fsGroup:
+                rule: RunAsAny
+              volumes:
+              - '*'
+      Create PVC:
+        type: K8S
+        endpoints:
+          kubernetesServer: tkg02
+        input:
+          action: CREATE
+          timeout: 5
+          continueOnConflict: false
+          filePath: ''
+          scmConstants: {
+            }
+          yaml: |-
+            kind: PersistentVolumeClaim
+            apiVersion: v1
+            metadata:
+              name: mongo-storage
+              namespace: ${input.namespace}
+            spec:
+              accessModes:
+                - ReadWriteOnce
+              resources:
+                requests:
+                  storage: 1Gi
