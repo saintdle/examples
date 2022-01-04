@@ -1,5 +1,12 @@
 {
   "CSI" : {
+    "2.4.0": {
+      "vSphere": { "min": "6.7.1", "max": "7.0.4" },
+      "k8s": { "min": "1.20", "max": "1.22" },
+      "isCPIRequired": false,
+      "deploymentPath": [
+          "https://raw.githubusercontent.com/kubernetes-sigs/vsphere-csi-driver/v2.4.0/manifests/vanilla/vsphere-csi-driver.yaml" ]
+    },
     "2.3.0": {
       "vSphere": { "min": "6.7.1", "max": "7.0.4" },
       "k8s": { "min": "1.19", "max": "1.22" },
