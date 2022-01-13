@@ -1,0 +1,121 @@
+---
+project: deanl-cloud-init
+kind: PIPELINE
+name: Ngnix YAML Deployment
+icon: organization,left, is-pink
+enabled: true
+concurrency: 10
+input:
+  namespace: ''
+  replicas: '3'
+_inputMeta:
+  replicas:
+    mandatory: true
+    description: ''
+  namespace:
+    mandatory: true
+    description: ''
+output:
+  Complex-Deployment-Name: ${Stage0.Create Ngnix Complex Pod.output.response.deployments.nginx-complex-deployment.metadata.name}
+  Complex-Deployment-Replicas: ${Stage0.Create Ngnix Complex Pod.output.response.deployments.nginx-complex-deployment.spec.replicas}
+  Simple-Deployment-Name: ${Stage0.Create nginx deployment.output.response.deployments.nginx-simple-deployment.metadata.name}
+  Simple-Deployment-Replicas: ${Stage0.Create nginx deployment.output.response.deployments.nginx-simple-deployment.spec.replicas}
+workspace:
+  type: DOCKER
+  endpoint: ''
+  image: ''
+  registry: ''
+  path: ''
+  autoCloneForTrigger: false
+  limits:
+    memory: 512
+    cpu: 1.0
+stageOrder:
+- Stage0
+stages:
+  Stage0:
+    taskOrder:
+    - Namespace
+    - Create nginx deployment
+    - Create Ngnix Complex Pod
+    tasks:
+      Create Ngnix Complex Pod:
+        type: K8S
+        endpoints:
+          kubernetesServer: tkg02
+        input:
+          action: CREATE
+          timeout: 5
+          continueOnConflict: false
+          filePath: ''
+          scmConstants: {
+            }
+          yaml: |-
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: nginx-complex-deployment
+              namespace: ${input.namespace}
+              labels:
+                app: nginx
+            spec:
+              replicas: ${input.replicas}
+              selector:
+                matchLabels:
+                  app: nginx
+              template:
+                metadata:
+                  labels:
+                    app: nginx
+                spec:
+                  containers:
+                  - name: nginx
+                    image: nginx:1.14.2
+                    ports:
+                    - containerPort: 80
+      Namespace:
+        type: K8S
+        endpoints:
+          kubernetesServer: tkg02
+        input:
+          action: CREATE
+          timeout: 5
+          continueOnConflict: false
+          filePath: ''
+          scmConstants: {
+            }
+          yaml: "apiVersion: v1\nkind: Namespace\nmetadata:  \n  name: ${input.namespace}"
+      Create nginx deployment:
+        type: K8S
+        endpoints:
+          kubernetesServer: tkg02
+        input:
+          action: CREATE
+          timeout: 5
+          continueOnConflict: false
+          filePath: ''
+          scmConstants: {
+            }
+          yaml: |-
+            apiVersion: apps/v1
+            kind: Deployment
+            metadata:
+              name: nginx-simple-deployment
+              namespace: ${input.namespace}
+              labels:
+                app: nginx
+            spec:
+              replicas: ${input.replicas}
+              selector:
+                matchLabels:
+                  app: nginx
+              template:
+                metadata:
+                  labels:
+                    app: nginx
+                spec:
+                  containers:
+                  - name: nginx
+                    image: nginx:1.14.2
+                    ports:
+                    - containerPort: 80
